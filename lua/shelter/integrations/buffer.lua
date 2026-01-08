@@ -624,7 +624,7 @@ function M.setup()
 					clear_extmarks(bufnr)
 					local winid = nvim_get_current_win()
 					setup_buffer_options(bufnr, winid)
-					M.shelter_buffer(bufnr)
+					M.shelter_buffer(bufnr, true) -- sync=true to prevent flash
 				end
 				return true
 			end
@@ -652,11 +652,11 @@ function M.setup()
 				return true
 			end
 
-			-- Apply masking immediately before displaying
+			-- Apply masking immediately before displaying (sync=true prevents flash)
 			if state.is_enabled("files") then
 				local winid = nvim_get_current_win()
 				setup_buffer_options(bufnr, winid)
-				M.shelter_buffer(bufnr)
+				M.shelter_buffer(bufnr, true) -- sync=true to prevent flash
 			end
 
 			return true
@@ -671,7 +671,7 @@ function M.setup()
 			if state.is_enabled("files") then
 				local winid = nvim_get_current_win()
 				setup_buffer_options(ev.buf, winid)
-				M.shelter_buffer(ev.buf)
+				M.shelter_buffer(ev.buf, true) -- sync=true to prevent flash
 			end
 		end,
 	})
