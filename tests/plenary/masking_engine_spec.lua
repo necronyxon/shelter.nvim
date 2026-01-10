@@ -164,7 +164,9 @@ describe("shelter.masking.engine", function()
       config.setup({
         default_mode = "full",
         patterns = { ["*_TOKEN"] = "partial" },
-        partial_mode = { show_start = 2, show_end = 2, min_mask = 3 },
+        modes = {
+          partial = { show_start = 2, show_end = 2, min_mask = 3 },
+        },
       })
       engine.init()
       local masked = engine.mask_value("secrettoken", { key = "AUTH_TOKEN", source = "test.env" })

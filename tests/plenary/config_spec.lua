@@ -63,28 +63,28 @@ describe("shelter.config", function()
 			assert.equals(5, cfg.modes.partial.min_mask)
 		end)
 
-		it("sets env file patterns", function()
+		it("sets env filetypes", function()
 			config.setup({
-				env_file_patterns = { ".env", ".env.local", "secrets" },
+				env_filetypes = { "dotenv", "edf", "conf" },
 			})
 			local cfg = config.get()
 
-			assert.equals(3, #cfg.env_file_patterns)
-			assert.equals(".env", cfg.env_file_patterns[1])
+			assert.equals(3, #cfg.env_filetypes)
+			assert.equals("dotenv", cfg.env_filetypes[1])
 		end)
 
 		it("sets module toggles", function()
 			config.setup({
 				modules = {
 					files = false,
-					peek = true,
+					snacks_previewer = true,
 					telescope_previewer = true,
 				},
 			})
 			local cfg = config.get()
 
 			assert.is_false(cfg.modules.files)
-			assert.is_true(cfg.modules.peek)
+			assert.is_true(cfg.modules.snacks_previewer)
 			assert.is_true(cfg.modules.telescope_previewer)
 		end)
 
@@ -165,7 +165,7 @@ describe("shelter.config", function()
 			assert.has_no.errors(function()
 				config.setup({
 					patterns = { ["*"] = "full" },
-					env_file_patterns = { ".env" },
+					env_filetypes = { "dotenv" },
 					modes = {},
 				})
 			end)
@@ -198,11 +198,11 @@ describe("shelter.config", function()
 			assert.is_true(config.get().skip_comments)
 		end)
 
-		it("has correct default env_file_patterns", function()
+		it("has correct default env_filetypes", function()
 			config.setup({})
-			local patterns = config.get().env_file_patterns
-			assert.is_table(patterns)
-			assert.is_true(vim.tbl_contains(patterns, ".env"))
+			local filetypes = config.get().env_filetypes
+			assert.is_table(filetypes)
+			assert.is_true(vim.tbl_contains(filetypes, "dotenv"))
 		end)
 
 		it("has correct default modes table", function()

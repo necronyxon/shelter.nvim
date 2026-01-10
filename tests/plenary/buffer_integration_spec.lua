@@ -47,7 +47,7 @@ describe("shelter.integrations.buffer", function()
       mask_char = "*",
       skip_comments = true,
       default_mode = "full",
-      env_file_patterns = { ".env", ".env.*", "test.env" },
+      env_filetypes = { "dotenv", "edf" },
       modules = { files = true },
     })
     state.set_initial("files", true)
