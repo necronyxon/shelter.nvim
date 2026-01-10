@@ -24,12 +24,20 @@ local nvim_get_current_buf = api.nvim_get_current_buf
 local nvim_get_current_win = api.nvim_get_current_win
 local table_concat = table.concat
 
--- Debouncing state for TextChanged events
+-- Debouncing state for edit events
 local DEBOUNCE_MS = 50
 local buffer_timers = {}
 
 -- Content hash tracking to skip redundant re-masks
 local buffer_content_hashes = {}
+
+-- Line-specific re-masking state
+local buffer_pending_changes = {} -- bufnr → {min_line, max_line}
+local buffer_attached = {} -- bufnr → true if attached
+
+-- Fast locals for math
+local math_min = math.min
+local math_max = math.max
 
 ---Setup buffer options for sheltering
 ---@param bufnr number
@@ -43,8 +51,8 @@ local function setup_buffer_options(bufnr, winid)
 	completion.disable(bufnr)
 end
 
----Debounced shelter for TextChanged events
----Coalesces rapid edits into a single re-mask operation
+---Debounced shelter for edit events
+---Coalesces rapid edits into a single re-mask operation with line range
 ---@param bufnr number
 local function debounced_shelter(bufnr)
 	-- Cancel any pending timer for this buffer
@@ -57,16 +65,63 @@ local function debounced_shelter(bufnr)
 	buffer_timers[bufnr] = vim.fn.timer_start(DEBOUNCE_MS, function()
 		buffer_timers[bufnr] = nil
 		if nvim_buf_is_valid(bufnr) and state.is_enabled("files") then
-			M.shelter_buffer(bufnr, true)
+			-- Get accumulated line range and clear it
+			local line_range = buffer_pending_changes[bufnr]
+			buffer_pending_changes[bufnr] = nil
+
+			-- Pass line range for incremental update
+			M.shelter_buffer(bufnr, true, line_range)
 		end
 	end)
+end
+
+---Attach to buffer for line change tracking via nvim_buf_attach
+---@param bufnr number
+local function attach_buffer(bufnr)
+	if buffer_attached[bufnr] then
+		return
+	end
+
+	api.nvim_buf_attach(bufnr, false, {
+		on_lines = function(_, buf, _, first_line, last_line, last_line_updated)
+			-- Skip if not enabled or paste in progress
+			if not state.is_enabled("files") then
+				return
+			end
+			if paste.is_paste_in_progress() then
+				return
+			end
+
+			-- Accumulate changed line range
+			local pending = buffer_pending_changes[buf]
+			if pending then
+				pending.min_line = math_min(pending.min_line, first_line)
+				pending.max_line = math_max(pending.max_line, last_line_updated)
+			else
+				buffer_pending_changes[buf] = {
+					min_line = first_line,
+					max_line = last_line_updated,
+				}
+			end
+
+			-- Debounce the re-mask
+			debounced_shelter(buf)
+		end,
+
+		on_detach = function(_, buf)
+			buffer_attached[buf] = nil
+			buffer_pending_changes[buf] = nil
+		end,
+	})
+
+	buffer_attached[bufnr] = true
 end
 
 ---Shelter a buffer (apply masks)
 ---@param bufnr? number Buffer number (default: current)
 ---@param sync? boolean If true, apply masks synchronously (for paste protection)
----@param force? boolean If true, skip content hash check
-function M.shelter_buffer(bufnr, sync, force)
+---@param line_range? {min_line: number, max_line: number} Optional line range for incremental update
+function M.shelter_buffer(bufnr, sync, line_range)
 	bufnr = bufnr or nvim_get_current_buf()
 
 	-- Check if feature is enabled
@@ -87,12 +142,12 @@ function M.shelter_buffer(bufnr, sync, force)
 	-- Get buffer name for source tracking
 	local bufname = nvim_buf_get_name(bufnr)
 
-	-- Get buffer content
+	-- Get buffer content (still need full content for parsing)
 	local lines = nvim_buf_get_lines(bufnr, 0, -1, false)
 	local content = table_concat(lines, "\n")
 
-	-- Skip if content hasn't changed (optimization for rapid events)
-	if not force then
+	-- Skip content hash check for incremental updates (line_range provided)
+	if not line_range then
 		local content_len = #content
 		-- Simple hash: length + first 64 chars (matches engine.lua hash strategy for small files)
 		local simple_hash
@@ -108,8 +163,15 @@ function M.shelter_buffer(bufnr, sync, force)
 		buffer_content_hashes[bufnr] = simple_hash
 	end
 
-	-- Clear existing marks
-	extmarks.clear(bufnr)
+	-- Clear extmarks (full or partial)
+	if line_range then
+		-- Only clear affected lines (add 1 line buffer for multi-line values)
+		local clear_start = math_max(0, line_range.min_line - 1)
+		local clear_end = math_min(#lines, line_range.max_line + 2)
+		extmarks.clear_range(bufnr, clear_start, clear_end)
+	else
+		extmarks.clear(bufnr)
+	end
 
 	-- Generate masks (includes pre-computed line_offsets from Rust)
 	local result = masking.generate_masks(content, bufname)
@@ -118,8 +180,23 @@ function M.shelter_buffer(bufnr, sync, force)
 	local line_offsets = result.line_offsets
 	assert(line_offsets and #line_offsets > 0, "shelter.nvim: line_offsets not provided by native parser")
 
+	-- Filter masks to line range if incremental
+	local masks_to_apply = result.masks
+	if line_range then
+		masks_to_apply = {}
+		local min_line = line_range.min_line + 1 -- Convert to 1-indexed
+		local max_line = line_range.max_line + 2 -- Add buffer for multi-line
+
+		for _, mask in ipairs(result.masks) do
+			-- Include mask if it overlaps with changed range
+			if mask.line_number <= max_line and mask.value_end_line >= min_line then
+				masks_to_apply[#masks_to_apply + 1] = mask
+			end
+		end
+	end
+
 	-- Apply masks (sync mode for paste protection, pass lines to avoid double read)
-	extmarks.apply_masks(bufnr, result.masks, line_offsets, lines, sync)
+	extmarks.apply_masks(bufnr, masks_to_apply, line_offsets, lines, sync)
 end
 
 ---Shelter a preview buffer (for picker integrations)
@@ -268,6 +345,8 @@ function M.setup()
 			if state.is_enabled("files") then
 				local winid = nvim_get_current_win()
 				setup_buffer_options(ev.buf, winid)
+				-- Attach for line-specific change tracking
+				attach_buffer(ev.buf)
 				M.shelter_buffer(ev.buf, true) -- sync=true to prevent flash
 			end
 		end,
@@ -279,6 +358,8 @@ function M.setup()
 			if state.is_enabled("files") then
 				local winid = nvim_get_current_win()
 				setup_buffer_options(ev.buf, winid)
+				-- Attach for line-specific change tracking
+				attach_buffer(ev.buf)
 				M.shelter_buffer(ev.buf, true)
 			end
 		end,
@@ -297,33 +378,7 @@ function M.setup()
 			end
 		end,
 
-		on_text_changed = function(ev)
-			if not env_file.is_env_buffer(ev.buf) then
-				return
-			end
-			if paste.is_paste_in_progress() then
-				return
-			end
-			if not state.is_enabled("files") then
-				return
-			end
-			-- Use debounced update to coalesce rapid edits
-			debounced_shelter(ev.buf)
-		end,
-
-		on_text_changed_i = function(ev)
-			if not env_file.is_env_buffer(ev.buf) then
-				return
-			end
-			if paste.is_paste_in_progress() then
-				return
-			end
-			if not state.is_enabled("files") then
-				return
-			end
-			-- Use debounced update to coalesce rapid edits
-			debounced_shelter(ev.buf)
-		end,
+		-- TextChanged/TextChangedI no longer needed - using nvim_buf_attach on_lines
 
 		on_insert_leave = function(ev)
 			if not env_file.is_env_buffer(ev.buf) then
@@ -338,7 +393,10 @@ function M.setup()
 				vim.fn.timer_stop(buffer_timers[ev.buf])
 				buffer_timers[ev.buf] = nil
 			end
-			M.shelter_buffer(ev.buf, true)
+			-- Get accumulated line range and apply with it
+			local line_range = buffer_pending_changes[ev.buf]
+			buffer_pending_changes[ev.buf] = nil
+			M.shelter_buffer(ev.buf, true, line_range)
 		end,
 	})
 end

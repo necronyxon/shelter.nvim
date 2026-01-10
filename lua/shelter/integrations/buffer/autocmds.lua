@@ -24,8 +24,6 @@ end
 ---@field on_filetype fun(ev: table) Called on FileType event
 ---@field on_buf_enter fun(ev: table) Called on BufEnter event
 ---@field on_buf_leave fun(ev: table) Called on BufLeave event
----@field on_text_changed fun(ev: table) Called on TextChanged event
----@field on_text_changed_i fun(ev: table) Called on TextChangedI event
 ---@field on_insert_leave fun(ev: table) Called on InsertLeave event
 
 ---Setup buffer autocmds
@@ -55,17 +53,8 @@ function M.setup(callbacks)
 		callback = callbacks.on_buf_leave,
 	})
 
-	-- TextChanged (non-insert) - applies to undo/redo/external changes
-	nvim_create_autocmd("TextChanged", {
-		group = augroup,
-		callback = callbacks.on_text_changed,
-	})
-
-	-- TextChangedI (insert mode)
-	nvim_create_autocmd("TextChangedI", {
-		group = augroup,
-		callback = callbacks.on_text_changed_i,
-	})
+	-- Note: TextChanged/TextChangedI replaced by nvim_buf_attach on_lines callback
+	-- for line-specific re-masking performance
 
 	-- InsertLeave - ensure masks are applied when exiting insert mode
 	nvim_create_autocmd("InsertLeave", {

@@ -34,6 +34,15 @@ function M.clear(bufnr)
 	nvim_buf_clear_namespace(bufnr, ns, 0, -1)
 end
 
+---Clear extmarks in a specific line range
+---@param bufnr number
+---@param start_line number 0-indexed start line
+---@param end_line number 0-indexed end line (exclusive)
+function M.clear_range(bufnr, start_line, end_line)
+	local ns = M.get_namespace()
+	nvim_buf_clear_namespace(bufnr, ns, start_line, end_line)
+end
+
 ---Process a single mask entry and add extmarks to the collection
 ---@param mask_info ShelterMaskedLine
 ---@param lines string[]
