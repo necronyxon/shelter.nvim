@@ -76,34 +76,34 @@ Choose cloak.nvim if you need to mask values in **any filetype** (not just env f
 <!-- BENCHMARK_START -->
 ### Performance Benchmarks
 
-Measured on GitHub Actions (Ubuntu, averaged over 10 iterations):
+Measured on GitHub Actions (Ubuntu, averaged over 100 iterations):
 
 #### Parsing Performance
 
 | Lines | shelter.nvim | cloak.nvim | Difference |
 |-------|--------------|------------|------------|
-| 10    | 0.11 ms      | 0.06 ms      | 1.7x slower |
-| 50    | 0.11 ms      | 0.18 ms      | 1.6x faster |
-| 100    | 0.15 ms      | 0.35 ms      | 2.3x faster |
-| 500    | 0.46 ms      | 1.86 ms      | 4.0x faster |
+| 10    | 0.02 ms      | 0.05 ms      | 1.9x faster |
+| 50    | 0.05 ms      | 0.18 ms      | 3.5x faster |
+| 100    | 0.09 ms      | 0.34 ms      | 3.8x faster |
+| 500    | 0.38 ms      | 1.85 ms      | 4.9x faster |
 
 #### Preview Performance (Telescope)
 
 | Lines | shelter.nvim | cloak.nvim | Difference |
 |-------|--------------|------------|------------|
-| 10    | 0.04 ms      | 0.05 ms      | 1.3x faster |
-| 50    | 0.04 ms      | 0.22 ms      | 4.9x faster |
-| 100    | 0.17 ms      | 0.42 ms      | 2.5x faster |
-| 500    | 0.28 ms      | 1.92 ms      | 6.8x faster |
+| 10    | 0.02 ms      | 0.05 ms      | 2.6x faster |
+| 50    | 0.04 ms      | 0.19 ms      | 4.8x faster |
+| 100    | 0.07 ms      | 0.35 ms      | 4.8x faster |
+| 500    | 0.40 ms      | 1.97 ms      | 5.0x faster |
 
 #### Edit Re-masking Performance
 
 | Lines | shelter.nvim | cloak.nvim | Difference |
 |-------|--------------|------------|------------|
-| 10    | 0.05 ms      | 0.05 ms      | ~same |
-| 50    | 0.16 ms      | 0.18 ms      | 1.2x faster |
-| 100    | 0.35 ms      | 0.41 ms      | 1.2x faster |
-| 500    | 1.53 ms      | 2.01 ms      | 1.3x faster |
+| 10    | 0.04 ms      | 0.04 ms      | 1.2x faster |
+| 50    | 0.15 ms      | 0.19 ms      | 1.3x faster |
+| 100    | 0.33 ms      | 0.40 ms      | 1.2x faster |
+| 500    | 1.68 ms      | 1.87 ms      | 1.1x faster |
 
 *Last updated: 2026-01-10*
 <!-- BENCHMARK_END -->
