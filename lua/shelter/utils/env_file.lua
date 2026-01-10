@@ -4,22 +4,12 @@ local M = {}
 
 local config = require("shelter.config")
 
----Check if a filename matches env file patterns
+---Check if a filename matches env filetypes (using vim.filetype.match)
 ---@param filename string
 ---@return boolean
 function M.is_env_file(filename)
-	local cfg = config.get()
-	local basename = vim.fn.fnamemodify(filename, ":t")
-
-	for _, pattern in ipairs(cfg.env_file_patterns or {}) do
-		local lua_pattern = pattern:gsub("%*", ".*")
-		lua_pattern = "^" .. lua_pattern .. "$"
-		if basename:match(lua_pattern) then
-			return true
-		end
-	end
-
-	return false
+	local filetype = vim.filetype.match({ filename = filename })
+	return M.is_env_filetype(filetype)
 end
 
 ---Check if a filetype is an env filetype
