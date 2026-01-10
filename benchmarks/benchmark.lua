@@ -147,7 +147,6 @@ end
 local function benchmark_shelter_edit(content, iterations)
   local buffer_mod = require("shelter.integrations.buffer")
   local extmarks = require("shelter.integrations.buffer.extmarks")
-  local engine = require("shelter.masking.engine")
 
   -- Create buffer and set up
   local bufnr = vim.api.nvim_create_buf(false, true)
@@ -163,8 +162,7 @@ local function benchmark_shelter_edit(content, iterations)
     -- Simulate edit (modify first line - like typing)
     vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, { "MODIFIED_" .. i .. "=new_secret_value_xxxxx" })
 
-    -- Clear cache and extmarks (what TextChanged handler does)
-    engine.clear_caches()
+    -- Clear extmarks (simulates what happens on re-mask)
     extmarks.clear(bufnr)
 
     local start = hrtime()

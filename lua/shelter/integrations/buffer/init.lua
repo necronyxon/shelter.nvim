@@ -24,6 +24,13 @@ local nvim_get_current_buf = api.nvim_get_current_buf
 local nvim_get_current_win = api.nvim_get_current_win
 local table_concat = table.concat
 
+-- Debouncing state for TextChanged events
+local DEBOUNCE_MS = 50
+local buffer_timers = {}
+
+-- Content hash tracking to skip redundant re-masks
+local buffer_content_hashes = {}
+
 ---Setup buffer options for sheltering
 ---@param bufnr number
 ---@param winid number
@@ -36,10 +43,30 @@ local function setup_buffer_options(bufnr, winid)
 	completion.disable(bufnr)
 end
 
+---Debounced shelter for TextChanged events
+---Coalesces rapid edits into a single re-mask operation
+---@param bufnr number
+local function debounced_shelter(bufnr)
+	-- Cancel any pending timer for this buffer
+	if buffer_timers[bufnr] then
+		vim.fn.timer_stop(buffer_timers[bufnr])
+		buffer_timers[bufnr] = nil
+	end
+
+	-- Schedule new update
+	buffer_timers[bufnr] = vim.fn.timer_start(DEBOUNCE_MS, function()
+		buffer_timers[bufnr] = nil
+		if nvim_buf_is_valid(bufnr) and state.is_enabled("files") then
+			M.shelter_buffer(bufnr, true)
+		end
+	end)
+end
+
 ---Shelter a buffer (apply masks)
 ---@param bufnr? number Buffer number (default: current)
 ---@param sync? boolean If true, apply masks synchronously (for paste protection)
-function M.shelter_buffer(bufnr, sync)
+---@param force? boolean If true, skip content hash check
+function M.shelter_buffer(bufnr, sync, force)
 	bufnr = bufnr or nvim_get_current_buf()
 
 	-- Check if feature is enabled
@@ -60,12 +87,26 @@ function M.shelter_buffer(bufnr, sync)
 	-- Get buffer name for source tracking
 	local bufname = nvim_buf_get_name(bufnr)
 
-	-- Clear existing marks
-	extmarks.clear(bufnr)
-
 	-- Get buffer content
 	local lines = nvim_buf_get_lines(bufnr, 0, -1, false)
 	local content = table_concat(lines, "\n")
+
+	-- Skip if content hasn't changed (optimization for rapid events)
+	if not force then
+		local content_len = #content
+		-- Simple hash: length + first 64 chars (matches engine.lua hash strategy for small files)
+		local simple_hash = content_len < 512
+			and (content_len .. ":" .. content:sub(1, 64))
+			or (content_len .. ":" .. content:sub(1, 32) .. content:sub(-32))
+
+		if buffer_content_hashes[bufnr] == simple_hash then
+			return -- Content unchanged, skip re-masking
+		end
+		buffer_content_hashes[bufnr] = simple_hash
+	end
+
+	-- Clear existing marks
+	extmarks.clear(bufnr)
 
 	-- Generate masks (includes pre-computed line_offsets from Rust)
 	local result = masking.generate_masks(content, bufname)
@@ -260,9 +301,8 @@ function M.setup()
 			if not state.is_enabled("files") then
 				return
 			end
-			local masking_engine = require("shelter.masking.engine")
-			masking_engine.clear_caches()
-			M.shelter_buffer(ev.buf, true)
+			-- Use debounced update to coalesce rapid edits
+			debounced_shelter(ev.buf)
 		end,
 
 		on_text_changed_i = function(ev)
@@ -275,9 +315,8 @@ function M.setup()
 			if not state.is_enabled("files") then
 				return
 			end
-			local masking_engine = require("shelter.masking.engine")
-			masking_engine.clear_caches()
-			M.shelter_buffer(ev.buf, true)
+			-- Use debounced update to coalesce rapid edits
+			debounced_shelter(ev.buf)
 		end,
 
 		on_insert_leave = function(ev)
@@ -287,8 +326,12 @@ function M.setup()
 			if not state.is_enabled("files") then
 				return
 			end
-			local masking_engine = require("shelter.masking.engine")
-			masking_engine.clear_caches()
+			-- Final update after leaving insert mode (immediate, not debounced)
+			-- Cancel any pending debounced update
+			if buffer_timers[ev.buf] then
+				vim.fn.timer_stop(buffer_timers[ev.buf])
+				buffer_timers[ev.buf] = nil
+			end
 			M.shelter_buffer(ev.buf, true)
 		end,
 	})
