@@ -50,9 +50,11 @@ function M.setup()
 
 		-- Apply masking if env file
 		local basename = vim.fn.fnamemodify(filename, ":t")
-		if env_file.is_env_file(filename) then
+		-- Detect filetype from filename since preview buffer may have different filetype
+		local filetype = vim.filetype.match({ filename = filename })
+		if filetype and env_file.is_env_filetype(filetype) then
 			local buffer = require("shelter.integrations.buffer")
-			buffer.shelter_preview_buffer(bufnr, basename)
+			buffer.shelter_preview_buffer(bufnr, basename, filetype)
 		end
 	end
 end

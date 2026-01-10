@@ -209,14 +209,11 @@ function M.setup()
 	engine.init()
 
 	-- Setup paste override for protection
-	paste.setup(
-		function(bufnr, masks, line_offsets, sync)
-			extmarks.apply_masks(bufnr, masks, line_offsets, sync)
-		end,
-		function(content, source)
-			return masking.generate_masks(content, source)
-		end
-	)
+	paste.setup(function(bufnr, masks, line_offsets, sync)
+		extmarks.apply_masks(bufnr, masks, line_offsets, sync)
+	end, function(content, source)
+		return masking.generate_masks(content, source)
+	end)
 
 	-- Setup autocmds with callbacks
 	autocmds.setup({

@@ -100,10 +100,7 @@ function M.undefine(name)
 
 	-- Cannot remove built-in modes
 	if builtins[name] then
-		vim.notify(
-			string.format("shelter.nvim: Cannot undefine built-in mode '%s'", name),
-			vim.log.levels.WARN
-		)
+		vim.notify(string.format("shelter.nvim: Cannot undefine built-in mode '%s'", name), vim.log.levels.WARN)
 		return false
 	end
 
@@ -184,10 +181,7 @@ function M.apply(name, value, context)
 
 	-- Handle unknown modes gracefully
 	if not M.exists(name) then
-		vim.notify(
-			string.format("shelter.nvim: Unknown mode '%s', falling back to 'full'", name),
-			vim.log.levels.WARN
-		)
+		vim.notify(string.format("shelter.nvim: Unknown mode '%s', falling back to 'full'", name), vim.log.levels.WARN)
 		name = "full"
 	end
 
@@ -274,10 +268,7 @@ function M.setup(config)
 				if M.exists(name) then
 					M.configure(name, mode_opts)
 				else
-					vim.notify(
-						string.format("shelter.nvim: Cannot configure unknown mode '%s'", name),
-						vim.log.levels.WARN
-					)
+					vim.notify(string.format("shelter.nvim: Cannot configure unknown mode '%s'", name), vim.log.levels.WARN)
 				end
 			end
 		end
