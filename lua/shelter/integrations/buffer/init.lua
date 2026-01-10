@@ -24,15 +24,10 @@ local nvim_get_current_buf = api.nvim_get_current_buf
 local nvim_get_current_win = api.nvim_get_current_win
 local table_concat = table.concat
 
--- Debouncing state for edit events
-local DEBOUNCE_MS = 50
-local buffer_timers = {}
-
 -- Content hash tracking to skip redundant re-masks
 local buffer_content_hashes = {}
 
 -- Line-specific re-masking state
-local buffer_pending_changes = {} -- bufnr → {min_line, max_line}
 local buffer_attached = {} -- bufnr → true if attached
 
 -- Fast locals for math
@@ -51,30 +46,6 @@ local function setup_buffer_options(bufnr, winid)
 	completion.disable(bufnr)
 end
 
----Debounced shelter for edit events
----Coalesces rapid edits into a single re-mask operation with line range
----@param bufnr number
-local function debounced_shelter(bufnr)
-	-- Cancel any pending timer for this buffer
-	if buffer_timers[bufnr] then
-		vim.fn.timer_stop(buffer_timers[bufnr])
-		buffer_timers[bufnr] = nil
-	end
-
-	-- Schedule new update
-	buffer_timers[bufnr] = vim.fn.timer_start(DEBOUNCE_MS, function()
-		buffer_timers[bufnr] = nil
-		if nvim_buf_is_valid(bufnr) and state.is_enabled("files") then
-			-- Get accumulated line range and clear it
-			local line_range = buffer_pending_changes[bufnr]
-			buffer_pending_changes[bufnr] = nil
-
-			-- Pass line range for incremental update
-			M.shelter_buffer(bufnr, true, line_range)
-		end
-	end)
-end
-
 ---Attach to buffer for line change tracking via nvim_buf_attach
 ---@param bufnr number
 local function attach_buffer(bufnr)
@@ -83,7 +54,7 @@ local function attach_buffer(bufnr)
 	end
 
 	api.nvim_buf_attach(bufnr, false, {
-		on_lines = function(_, buf, _, first_line, last_line, last_line_updated)
+		on_lines = function(_, buf, _, first_line, _, last_line_updated)
 			-- Skip if not enabled or paste in progress
 			if not state.is_enabled("files") then
 				return
@@ -92,25 +63,16 @@ local function attach_buffer(bufnr)
 				return
 			end
 
-			-- Accumulate changed line range
-			local pending = buffer_pending_changes[buf]
-			if pending then
-				pending.min_line = math_min(pending.min_line, first_line)
-				pending.max_line = math_max(pending.max_line, last_line_updated)
-			else
-				buffer_pending_changes[buf] = {
-					min_line = first_line,
-					max_line = last_line_updated,
-				}
-			end
-
-			-- Debounce the re-mask
-			debounced_shelter(buf)
+			-- Immediate re-mask with line range (no debounce - line-specific is fast)
+			local line_range = {
+				min_line = first_line,
+				max_line = last_line_updated,
+			}
+			M.shelter_buffer(buf, true, line_range)
 		end,
 
 		on_detach = function(_, buf)
 			buffer_attached[buf] = nil
-			buffer_pending_changes[buf] = nil
 		end,
 	})
 
@@ -163,11 +125,13 @@ function M.shelter_buffer(bufnr, sync, line_range)
 		buffer_content_hashes[bufnr] = simple_hash
 	end
 
-	-- Clear extmarks (full or partial)
+	-- Calculate clear range for incremental updates
+	-- These are 0-indexed line numbers for nvim_buf_clear_namespace
+	local clear_start, clear_end
 	if line_range then
-		-- Only clear affected lines (add 1 line buffer for multi-line values)
-		local clear_start = math_max(0, line_range.min_line - 1)
-		local clear_end = math_min(#lines, line_range.max_line + 2)
+		-- Add 1 line buffer on each side for multi-line values
+		clear_start = math_max(0, line_range.min_line - 1)
+		clear_end = math_min(#lines, line_range.max_line + 2)
 		extmarks.clear_range(bufnr, clear_start, clear_end)
 	else
 		extmarks.clear(bufnr)
@@ -180,16 +144,20 @@ function M.shelter_buffer(bufnr, sync, line_range)
 	local line_offsets = result.line_offsets
 	assert(line_offsets and #line_offsets > 0, "shelter.nvim: line_offsets not provided by native parser")
 
-	-- Filter masks to line range if incremental
+	-- Filter masks to match the cleared range (if incremental)
 	local masks_to_apply = result.masks
 	if line_range then
 		masks_to_apply = {}
-		local min_line = line_range.min_line + 1 -- Convert to 1-indexed
-		local max_line = line_range.max_line + 2 -- Add buffer for multi-line
+		-- Convert 0-indexed clear range to 1-indexed for mask comparison
+		-- clear_start (0-idx) corresponds to 1-indexed line (clear_start + 1)
+		-- clear_end (0-idx, exclusive) corresponds to 1-indexed line clear_end
+		local filter_min = clear_start + 1 -- 1-indexed
+		local filter_max = clear_end -- 1-indexed (0-idx exclusive = 1-idx inclusive)
 
 		for _, mask in ipairs(result.masks) do
-			-- Include mask if it overlaps with changed range
-			if mask.line_number <= max_line and mask.value_end_line >= min_line then
+			-- Include mask if it overlaps with cleared range
+			-- mask.line_number and mask.value_end_line are 1-indexed
+			if mask.line_number <= filter_max and mask.value_end_line >= filter_min then
 				masks_to_apply[#masks_to_apply + 1] = mask
 			end
 		end
@@ -387,16 +355,8 @@ function M.setup()
 			if not state.is_enabled("files") then
 				return
 			end
-			-- Final update after leaving insert mode (immediate, not debounced)
-			-- Cancel any pending debounced update
-			if buffer_timers[ev.buf] then
-				vim.fn.timer_stop(buffer_timers[ev.buf])
-				buffer_timers[ev.buf] = nil
-			end
-			-- Get accumulated line range and apply with it
-			local line_range = buffer_pending_changes[ev.buf]
-			buffer_pending_changes[ev.buf] = nil
-			M.shelter_buffer(ev.buf, true, line_range)
+			-- Full re-mask on InsertLeave to ensure consistency
+			M.shelter_buffer(ev.buf, true)
 		end,
 	})
 end
