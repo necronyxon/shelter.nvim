@@ -2,6 +2,15 @@
 ---Partial masking mode - shows start/end characters, masks middle
 local Base = require("shelter.modes.base")
 
+-- Lazy-loaded engine for cached mask access
+local engine = nil
+local function get_engine()
+	if not engine then
+		engine = require("shelter.masking.engine")
+	end
+	return engine
+end
+
 ---@type ShelterModeDefinition
 local definition = {
 	name = "partial",
@@ -57,6 +66,7 @@ local definition = {
 		local show_start = opts.show_start
 		local show_end = opts.show_end
 		local min_mask = opts.min_mask
+		local get_cached_mask = get_engine().get_cached_mask
 
 		local value = ctx.value
 		local value_len = #value
@@ -69,13 +79,13 @@ local definition = {
 			if fallback == "none" then
 				return value
 			end
-			-- Full mask
-			return string.rep(mask_char, value_len)
+			-- Full mask with cached string
+			return get_cached_mask(mask_char, value_len)
 		end
 
-		-- Partial masking (pure Lua - faster than FFI for simple string ops)
+		-- Partial masking with cached mask string
 		local mask_len = value_len - show_start - show_end
-		return value:sub(1, show_start) .. string.rep(mask_char, mask_len) .. value:sub(-show_end)
+		return value:sub(1, show_start) .. get_cached_mask(mask_char, mask_len) .. value:sub(-show_end)
 	end,
 
 	---@param options table

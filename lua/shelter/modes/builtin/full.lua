@@ -2,6 +2,15 @@
 ---Full masking mode - replaces all characters with mask character
 local Base = require("shelter.modes.base")
 
+-- Lazy-loaded engine for cached mask access
+local engine = nil
+local function get_engine()
+	if not engine then
+		engine = require("shelter.masking.engine")
+	end
+	return engine
+end
+
 ---@type ShelterModeDefinition
 local definition = {
 	name = "full",
@@ -38,13 +47,10 @@ local definition = {
 		-- Direct property access - options pre-resolved at config time
 		local opts = self.options
 		local mask_char = opts.mask_char
-		local fixed_length = opts.fixed_length
+		local length = opts.fixed_length or #ctx.value
 
-		-- Pure Lua - faster than FFI for simple string operations
-		if fixed_length then
-			return string.rep(mask_char, fixed_length)
-		end
-		return string.rep(mask_char, #ctx.value)
+		-- Use cached mask strings to avoid repeated string.rep()
+		return get_engine().get_cached_mask(mask_char, length)
 	end,
 
 	---@param options table

@@ -1,5 +1,6 @@
 ---@class ShelterExtmarks
 ---Extmark management for buffer masking
+---Optimized for single-pass application (no intermediate table collection)
 local M = {}
 
 local config = require("shelter.config")
@@ -11,9 +12,17 @@ local nvim_buf_is_valid = api.nvim_buf_is_valid
 local nvim_buf_set_extmark = api.nvim_buf_set_extmark
 local nvim_buf_clear_namespace = api.nvim_buf_clear_namespace
 local nvim_create_namespace = api.nvim_create_namespace
-local string_rep = string.rep
 local math_max = math.max
 local math_min = math.min
+
+-- Lazy-load engine for cached mask strings
+local engine = nil
+local function get_cached_mask(mask_char, length)
+	if not engine then
+		engine = require("shelter.masking.engine")
+	end
+	return engine.get_cached_mask(mask_char, length)
+end
 
 -- Namespace for extmarks
 local ns_id = nil
@@ -43,14 +52,16 @@ function M.clear_range(bufnr, start_line, end_line)
 	nvim_buf_clear_namespace(bufnr, ns, start_line, end_line)
 end
 
----Process a single mask entry and add extmarks to the collection
+---Apply a single mask directly to buffer (no intermediate collection)
+---This fuses the old process_mask + extmark application into one step
+---@param bufnr number
+---@param ns number Namespace ID
 ---@param mask_info ShelterMaskedLine
 ---@param lines string[]
 ---@param line_offsets number[]
----@param extmarks table
 ---@param hl_group string
 ---@param mask_char string
-local function process_mask(mask_info, lines, line_offsets, extmarks, hl_group, mask_char)
+local function apply_mask_direct(bufnr, ns, mask_info, lines, line_offsets, hl_group, mask_char)
 	local start_line_idx = mask_info.line_number - 1
 	local end_line_idx = mask_info.value_end_line - 1
 
@@ -79,7 +90,7 @@ local function process_mask(mask_info, lines, line_offsets, extmarks, hl_group, 
 	local is_multiline = end_line_idx > start_line_idx
 
 	if is_multiline then
-		-- Multi-line value handling
+		-- Multi-line value handling: apply extmark per line segment directly
 		for i = 0, end_line_idx - start_line_idx do
 			local line_idx = start_line_idx + i
 			if line_idx >= #lines then
@@ -114,25 +125,22 @@ local function process_mask(mask_info, lines, line_offsets, extmarks, hl_group, 
 			col_start = math_max(0, col_start)
 			col_end = math_max(col_start, col_end)
 
-			-- Generate mask for this line segment
+			-- Generate mask using cached string
 			local line_content_len = col_end - col_start
-			local line_mask = string_rep(mask_char, math_max(0, line_content_len))
+			local line_mask = get_cached_mask(mask_char, line_content_len)
 
-			extmarks[#extmarks + 1] = {
-				line_idx,
-				col_start,
-				{
-					end_col = col_end,
-					virt_text = { { line_mask, hl_group } },
-					virt_text_pos = "overlay",
-					hl_mode = "combine",
-					priority = 9999,
-					strict = false,
-				},
-			}
+			-- Apply extmark directly (no intermediate table)
+			nvim_buf_set_extmark(bufnr, ns, line_idx, col_start, {
+				end_col = col_end,
+				virt_text = { { line_mask, hl_group } },
+				virt_text_pos = "overlay",
+				hl_mode = "combine",
+				priority = 9999,
+				strict = false,
+			})
 		end
 	else
-		-- Single-line value handling
+		-- Single-line value handling: compute and apply directly
 		local value_start_col = value_col
 
 		-- For quoted values, skip the opening quote to preserve it
@@ -153,22 +161,19 @@ local function process_mask(mask_info, lines, line_offsets, extmarks, hl_group, 
 		value_end_col = math_min(value_end_col, #start_line)
 		value_end_col = math_max(value_start_col, value_end_col)
 
-		extmarks[#extmarks + 1] = {
-			start_line_idx,
-			value_start_col,
-			{
-				end_col = value_end_col,
-				virt_text = { { mask_info.mask, hl_group } },
-				virt_text_pos = "overlay",
-				hl_mode = "combine",
-				priority = 9999,
-				strict = false,
-			},
-		}
+		-- Apply extmark directly (no intermediate table)
+		nvim_buf_set_extmark(bufnr, ns, start_line_idx, value_start_col, {
+			end_col = value_end_col,
+			virt_text = { { mask_info.mask, hl_group } },
+			virt_text_pos = "overlay",
+			hl_mode = "combine",
+			priority = 9999,
+			strict = false,
+		})
 	end
 end
 
----Apply masks to a buffer using batched extmark application
+---Apply masks to a buffer using single-pass direct application
 ---@param bufnr number
 ---@param masks ShelterMaskedLine[]
 ---@param line_offsets number[] Pre-computed line offsets from Rust
@@ -180,26 +185,16 @@ function M.apply_masks(bufnr, masks, line_offsets, lines, sync)
 	local hl_group = cfg.highlight_group or "Comment"
 	local mask_char = cfg.mask_char or "*"
 
-	-- Use provided lines (avoids redundant buffer read)
-
-	-- Collect extmarks for batched application
-	local extmarks = {}
-
-	for _, mask_info in ipairs(masks) do
-		process_mask(mask_info, lines, line_offsets, extmarks, hl_group, mask_char)
-	end
-
-	-- Function to actually apply the extmarks
+	-- Single-pass application function
 	local function do_apply()
 		if not nvim_buf_is_valid(bufnr) then
 			return
 		end
 
 		-- Note: extmarks already cleared by shelter_buffer() before calling apply_masks()
-		-- No need to clear again here
-
-		for _, mark in ipairs(extmarks) do
-			pcall(nvim_buf_set_extmark, bufnr, ns, mark[1], mark[2], mark[3])
+		-- Apply each mask directly in a single pass (no intermediate collection)
+		for _, mask_info in ipairs(masks) do
+			apply_mask_direct(bufnr, ns, mask_info, lines, line_offsets, hl_group, mask_char)
 		end
 	end
 

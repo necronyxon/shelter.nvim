@@ -15,9 +15,45 @@ local parsed_cache = lru.new(LRU_SIZE)
 -- Fast locals for hot path
 local string_byte = string.byte
 local string_format = string.format
+local string_rep = string.rep
 local bit_band = bit and bit.band or function(a, b)
 	return a % (b + 1)
 end
+
+-- Pre-computed mask strings cache for common lengths
+-- Avoids repeated string.rep() calls for the same mask char + length
+local mask_cache = {}
+local MASK_CACHE_SIZE = 128 -- Cache masks up to 128 chars
+
+---Get or create cached mask string
+---@param mask_char string Single character used for masking
+---@param length number Desired mask length
+---@return string
+local function get_cached_mask(mask_char, length)
+	if length <= 0 then
+		return ""
+	end
+	if length > MASK_CACHE_SIZE then
+		return string_rep(mask_char, length)
+	end
+
+	local char_cache = mask_cache[mask_char]
+	if not char_cache then
+		char_cache = {}
+		mask_cache[mask_char] = char_cache
+	end
+
+	local cached = char_cache[length]
+	if not cached then
+		cached = string_rep(mask_char, length)
+		char_cache[length] = cached
+	end
+
+	return cached
+end
+
+-- Export for use by other modules
+M.get_cached_mask = get_cached_mask
 
 ---Optimized content hash using sampling for large files
 ---For small files (<512 bytes): use length + first 64 chars
@@ -51,6 +87,8 @@ end
 ---Clear all caches
 function M.clear_caches()
 	parsed_cache:clear()
+	-- Note: mask_cache is intentionally not cleared - mask strings are reusable
+	-- across content changes since they only depend on mask_char + length
 end
 
 ---@class ShelterParsedContent
