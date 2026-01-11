@@ -63,14 +63,19 @@ local function attach_buffer(bufnr)
 				return
 			end
 
-			-- Immediate re-mask with line range (no debounce - line-specific is fast)
-			-- Use max of last_line (before change) and last_line_updated (after change)
-			-- to cover full affected range during undo/redo operations
-			local line_range = {
-				min_line = first_line,
-				max_line = math_max(last_line, last_line_updated),
-			}
-			M.shelter_buffer(buf, true, line_range)
+			-- Check if line count changed (lines added/removed via undo/redo, Enter, delete, etc.)
+			-- When lines shift, extmark positions can become inconsistent, so do full re-mask
+			if last_line ~= last_line_updated then
+				-- Line count changed - full re-mask to handle shifted extmarks
+				M.shelter_buffer(buf, true)
+			else
+				-- Same line count - incremental update is safe
+				local line_range = {
+					min_line = first_line,
+					max_line = last_line_updated,
+				}
+				M.shelter_buffer(buf, true, line_range)
+			end
 		end,
 
 		on_detach = function(_, buf)
