@@ -292,40 +292,38 @@ sources = {
 ## Performance
 
 <!-- BENCHMARK_START -->
-
 ### Performance Benchmarks
 
 Measured on GitHub Actions (Ubuntu, averaged over 100 iterations):
 
 #### Parsing Performance
 
-| Lines | shelter.nvim | cloak.nvim | Difference  |
-| ----- | ------------ | ---------- | ----------- |
-| 10    | 0.02 ms      | 0.07 ms    | 3.2x faster |
-| 50    | 0.05 ms      | 0.18 ms    | 3.6x faster |
-| 100   | 0.08 ms      | 0.36 ms    | 4.4x faster |
-| 500   | 0.42 ms      | 1.85 ms    | 4.4x faster |
+| Lines | shelter.nvim | cloak.nvim | Difference |
+|-------|--------------|------------|------------|
+| 10    | 0.02 ms      | 0.04 ms      | 1.9x faster |
+| 50    | 0.05 ms      | 0.18 ms      | 3.8x faster |
+| 100    | 0.09 ms      | 0.35 ms      | 4.0x faster |
+| 500    | 0.43 ms      | 1.82 ms      | 4.2x faster |
 
 #### Preview Performance (Telescope)
 
-| Lines | shelter.nvim | cloak.nvim | Difference  |
-| ----- | ------------ | ---------- | ----------- |
-| 10    | 0.02 ms      | 0.05 ms    | 2.7x faster |
-| 50    | 0.04 ms      | 0.18 ms    | 4.1x faster |
-| 100   | 0.07 ms      | 0.38 ms    | 5.7x faster |
-| 500   | 0.45 ms      | 2.01 ms    | 4.5x faster |
+| Lines | shelter.nvim | cloak.nvim | Difference |
+|-------|--------------|------------|------------|
+| 10    | 0.01 ms      | 0.05 ms      | 3.3x faster |
+| 50    | 0.04 ms      | 0.18 ms      | 4.1x faster |
+| 100    | 0.07 ms      | 0.38 ms      | 5.4x faster |
+| 500    | 0.50 ms      | 1.88 ms      | 3.7x faster |
 
 #### Edit Re-masking Performance
 
-| Lines | shelter.nvim | cloak.nvim | Difference  |
-| ----- | ------------ | ---------- | ----------- |
-| 10    | 0.05 ms      | 0.05 ms    | ~same       |
-| 50    | 0.16 ms      | 0.19 ms    | 1.2x faster |
-| 100   | 0.33 ms      | 0.41 ms    | 1.2x faster |
-| 500   | 1.76 ms      | 1.71 ms    | ~same       |
+| Lines | shelter.nvim | cloak.nvim | Difference |
+|-------|--------------|------------|------------|
+| 10    | 0.04 ms      | 0.05 ms      | 1.3x faster |
+| 50    | 0.16 ms      | 0.19 ms      | 1.2x faster |
+| 100    | 0.32 ms      | 0.39 ms      | 1.2x faster |
+| 500    | 1.72 ms      | 1.76 ms      | ~same |
 
-_Last updated: 2026-01-11_
-
+*Last updated: 2026-01-11*
 <!-- BENCHMARK_END -->
 
 ### Why So Fast?
