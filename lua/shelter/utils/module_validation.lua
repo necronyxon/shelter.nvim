@@ -3,6 +3,7 @@
 local M = {}
 
 ---Module name aliases for convenience
+---Note: ecolog is handled specially in init.lua for subcontext support
 M.ALIASES = {
 	buffer = "files",
 	telescope = "telescope_previewer",
@@ -11,6 +12,7 @@ M.ALIASES = {
 }
 
 ---Valid module names
+---Note: ecolog modules are handled specially via `:Shelter toggle ecolog [cmp|peek|picker]`
 M.VALID_MODULES = {
 	"files",
 	"telescope_previewer",

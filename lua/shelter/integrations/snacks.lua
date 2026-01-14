@@ -33,6 +33,12 @@ function M.setup()
 		if state.is_enabled("snacks_previewer") then
 			vim.schedule(function()
 				if ctx.buf and vim.api.nvim_buf_is_valid(ctx.buf) then
+					-- Skip terminal buffers (e.g., lazygit)
+					local buftype = vim.bo[ctx.buf].buftype
+					if buftype == "terminal" then
+						return
+					end
+
 					local filepath = ctx.item and ctx.item.file
 					-- Detect filetype from filename since preview buffer has its own filetype
 					local filetype = filepath and vim.filetype.match({ filename = filepath })

@@ -55,6 +55,16 @@ function M.setup_all(modules)
 			M.register("snacks", snacks)
 		end
 	end
+
+	-- Ecolog integration (for ecolog-plugin LSP masking)
+	if modules.ecolog then
+		local ok, ecolog = pcall(require, "shelter.integrations.ecolog")
+		if ok then
+			local ecolog_opts = type(modules.ecolog) == "table" and modules.ecolog or {}
+			ecolog.setup(ecolog_opts)
+			M.register("ecolog", ecolog)
+		end
+	end
 end
 
 return M

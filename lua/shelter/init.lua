@@ -107,6 +107,18 @@ end
 ---Handle toggle command
 ---@param target string|nil Module name or nil for all
 function M._handle_toggle(target)
+	-- Special handling for "ecolog" without subcontext
+	if target == "ecolog" then
+		local ecolog_ok, ecolog = pcall(require, "shelter.integrations.ecolog")
+		if ecolog_ok and ecolog.is_setup() then
+			local enabled = ecolog.toggle() -- Toggles all contexts
+			vim.notify(string.format("shelter.nvim: ecolog %s", enabled and "enabled" or "disabled"), vim.log.levels.INFO)
+		else
+			vim.notify("shelter.nvim: ecolog integration not setup", vim.log.levels.ERROR)
+		end
+		return
+	end
+
 	module_validation.with_validation(target, function(module)
 		local enabled = state.toggle(module)
 		vim.notify(string.format("shelter.nvim: %s %s", module, enabled and "enabled" or "disabled"), vim.log.levels.INFO)
@@ -119,6 +131,18 @@ end
 ---Handle enable command
 ---@param target string|nil Module name or nil for all
 function M._handle_enable(target)
+	-- Special handling for "ecolog" without subcontext
+	if target == "ecolog" then
+		local ecolog_ok, ecolog = pcall(require, "shelter.integrations.ecolog")
+		if ecolog_ok and ecolog.is_setup() then
+			ecolog.enable() -- Enables all contexts
+			vim.notify("shelter.nvim: ecolog enabled", vim.log.levels.INFO)
+		else
+			vim.notify("shelter.nvim: ecolog integration not setup", vim.log.levels.ERROR)
+		end
+		return
+	end
+
 	module_validation.with_validation(target, function(module)
 		state.set_enabled(module, true)
 		vim.notify("shelter.nvim: " .. module .. " enabled", vim.log.levels.INFO)
@@ -131,6 +155,18 @@ end
 ---Handle disable command
 ---@param target string|nil Module name or nil for all
 function M._handle_disable(target)
+	-- Special handling for "ecolog" without subcontext
+	if target == "ecolog" then
+		local ecolog_ok, ecolog = pcall(require, "shelter.integrations.ecolog")
+		if ecolog_ok and ecolog.is_setup() then
+			ecolog.disable() -- Disables all contexts
+			vim.notify("shelter.nvim: ecolog disabled", vim.log.levels.INFO)
+		else
+			vim.notify("shelter.nvim: ecolog integration not setup", vim.log.levels.ERROR)
+		end
+		return
+	end
+
 	module_validation.with_validation(target, function(module)
 		state.set_enabled(module, false)
 		vim.notify("shelter.nvim: " .. module .. " disabled", vim.log.levels.INFO)
@@ -147,6 +183,12 @@ function M._setup_commands()
 		local args = vim.split(opts.args, "%s+", { trimempty = true })
 		local subcommand = args[1]
 		local target = args[2]
+		local subcontext = args[3]
+
+		-- For ecolog with subcontext, construct full target name
+		if target == "ecolog" and subcontext then
+			target = "ecolog_" .. subcontext
+		end
 
 		if subcommand == "toggle" then
 			M._handle_toggle(target)
@@ -178,10 +220,17 @@ function M._setup_commands()
 					return cmd:find(arglead, 1, true) == 1
 				end, subcommands)
 			elseif #args == 3 and vim.tbl_contains({ "toggle", "enable", "disable" }, args[2]) then
-				-- Complete module name
+				-- Complete module name (include "ecolog" for subcontext support)
+				local modules = vim.list_extend({ "ecolog" }, module_validation.VALID_MODULES)
 				return vim.tbl_filter(function(mod)
 					return mod:find(arglead, 1, true) == 1
-				end, module_validation.VALID_MODULES)
+				end, modules)
+			elseif #args == 4 and args[3] == "ecolog" and vim.tbl_contains({ "toggle", "enable", "disable" }, args[2]) then
+				-- Complete ecolog subcontexts
+				local subcontexts = { "cmp", "peek", "picker" }
+				return vim.tbl_filter(function(ctx)
+					return ctx:find(arglead, 1, true) == 1
+				end, subcontexts)
 			end
 
 			return {}
@@ -258,6 +307,23 @@ function M.info()
 		info,
 		string.format("    snacks_previewer: %s", state.is_enabled("snacks_previewer") and "enabled" or "disabled")
 	)
+
+	-- Ecolog integration status
+	local ecolog_ok, ecolog = pcall(require, "shelter.integrations.ecolog")
+	if ecolog_ok and ecolog.is_setup() then
+		table.insert(
+			info,
+			string.format("    ecolog_cmp: %s", state.is_enabled("ecolog_cmp") and "enabled" or "disabled")
+		)
+		table.insert(
+			info,
+			string.format("    ecolog_peek: %s", state.is_enabled("ecolog_peek") and "enabled" or "disabled")
+		)
+		table.insert(
+			info,
+			string.format("    ecolog_picker: %s", state.is_enabled("ecolog_picker") and "enabled" or "disabled")
+		)
+	end
 
 	-- Registered modes
 	local modes = require("shelter.modes")

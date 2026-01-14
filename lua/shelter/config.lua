@@ -7,11 +7,17 @@ local M = {}
 ---@field shelter_on_leave? boolean Re-shelter when leaving buffer (default: true)
 ---@field disable_cmp? boolean Disable nvim-cmp/blink-cmp in sheltered buffers (default: true)
 
+---@class ShelterEcologModuleConfig
+---Detailed configuration for the ecolog integration module
+---@field cmp? boolean Mask in completion (default: true)
+---@field peek? boolean Mask in hover (default: true)
+
 ---@class ShelterModulesConfig
 ---@field files boolean|ShelterFilesModuleConfig Buffer masking (boolean or detailed config)
 ---@field telescope_previewer boolean Telescope preview masking
 ---@field fzf_previewer boolean FZF preview masking
 ---@field snacks_previewer boolean Snacks preview masking
+---@field ecolog? boolean|ShelterEcologModuleConfig Ecolog integration (boolean or detailed config)
 
 ---@class ShelterBufferConfig
 ---@field shelter_on_leave boolean Re-shelter when leaving buffer (deprecated, use modules.files.shelter_on_leave)
