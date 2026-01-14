@@ -298,10 +298,7 @@ function M.info()
 	-- Ecolog integration status
 	local ecolog_ok, ecolog = pcall(require, "shelter.integrations.ecolog")
 	if ecolog_ok and ecolog.is_setup() then
-		table.insert(
-			info,
-			string.format("    ecolog_cmp: %s", state.is_enabled("ecolog_cmp") and "enabled" or "disabled")
-		)
+		table.insert(info, string.format("    ecolog_cmp: %s", state.is_enabled("ecolog_cmp") and "enabled" or "disabled"))
 		table.insert(
 			info,
 			string.format("    ecolog_peek: %s", state.is_enabled("ecolog_peek") and "enabled" or "disabled")

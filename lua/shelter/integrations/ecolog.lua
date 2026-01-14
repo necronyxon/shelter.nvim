@@ -30,6 +30,8 @@ local internal = {
 	wrapped_clients = {}, -- Store wrapped clients to avoid double-wrapping
 	augroup_id = nil, -- Autocmd group ID
 	picker_hook_id = nil, -- Hook ID for ecolog picker hook
+	peek_hook_id = nil, -- Hook ID for ecolog peek hook
+	original_values = {}, -- Cache of original unmasked values (keyed by var name)
 }
 
 ---Mask a value using shelter's masking engine (same as buffer masking)
@@ -165,6 +167,37 @@ function M._mask_completion_items(result)
 	return result
 end
 
+---Extract variable name and value from hover content for caching
+---@param contents string Hover content string
+---@return string|nil var_name, string|nil value
+local function extract_var_info(contents)
+	if type(contents) ~= "string" then
+		return nil, nil
+	end
+
+	-- Extract variable name from header: ## `VAR_NAME`
+	local var_name = contents:match("## `([^`]+)`")
+
+	-- Extract value from **Value**: `value` or multi-line format
+	local value_start, value_end = contents:find("%*%*Value%*%*:")
+	local source_start = contents:find("%*%*Source%*%*:")
+
+	if value_start and source_start and source_start > value_end then
+		local value_section = contents:sub(value_end + 1, source_start - 1)
+		local lines = {}
+		for val in value_section:gmatch("`([^`]*)`") do
+			table.insert(lines, val)
+		end
+		if #lines > 0 then
+			return var_name, table.concat(lines, "\n")
+		end
+	end
+
+	-- Fallback: single value format
+	local value = contents:match("%*%*Value%*%*:%s*`([^`]+)`")
+	return var_name, value
+end
+
 ---Mask hover result from ecolog-lsp
 ---@param result table LSP hover result
 ---@return table masked result
@@ -173,12 +206,23 @@ function M._mask_hover_result(result)
 		return result
 	end
 
-	-- Debug: capture the raw content before masking
+	-- Extract and cache original value before masking
 	if result.contents then
+		local content_str
 		if type(result.contents) == "string" then
+			content_str = result.contents
 			M._last_hover_content = result.contents
 		elseif type(result.contents) == "table" and result.contents.value then
+			content_str = result.contents.value
 			M._last_hover_content = result.contents.value
+		end
+
+		-- Cache the original value for peek functionality
+		if content_str then
+			local var_name, original_value = extract_var_info(content_str)
+			if var_name and original_value then
+				internal.original_values[var_name] = original_value
+			end
 		end
 	end
 
@@ -358,9 +402,25 @@ function M._setup_ecolog_hooks()
 		internal.picker_hook_id = id1
 	end
 
-	-- Note: We only use on_picker_entry, not on_variables_list
-	-- on_variables_list modifies values in place which could affect vim.env sync
-	-- on_picker_entry is sufficient for picker display masking
+	-- Register hook for peek/copy to return unmasked values
+	-- This hook fires when user wants to copy or peek at the actual value
+	local reg_ok2, id2 = pcall(function()
+		return hooks.register("on_variable_peek", function(var)
+			if not var or not var.name then
+				return var
+			end
+			-- Return the cached original value if we have it
+			local original_value = internal.original_values[var.name]
+			if original_value then
+				-- Return a copy with unmasked value
+				return vim.tbl_extend("force", var, { value = original_value })
+			end
+			return var
+		end, { id = "shelter_peek", priority = 100 })
+	end)
+	if reg_ok2 then
+		internal.peek_hook_id = id2
+	end
 end
 
 ---Setup the ecolog integration
@@ -500,10 +560,15 @@ function M.teardown()
 		if internal.picker_hook_id then
 			pcall(hooks.unregister, "on_picker_entry", internal.picker_hook_id)
 		end
+		if internal.peek_hook_id then
+			pcall(hooks.unregister, "on_variable_peek", internal.peek_hook_id)
+		end
 	end)
 	internal.picker_hook_id = nil
+	internal.peek_hook_id = nil
 
 	internal.wrapped_clients = {}
+	internal.original_values = {}
 	internal.is_setup = false
 end
 
