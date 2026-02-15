@@ -415,6 +415,7 @@ local shelter = require("shelter")
 | **LSP integration**    | ecolog-plugin                  | None                         | None                         |
 | **Build step**         | Requires Rust                  | None                         | None                         |
 | **File types**         | Env files only                 | Any filetype                 | 13+ formats (env, json, yaml, toml, etc.) |
+| **Leak-free masking**  | Yes — zero-gap architecture    | [No — flashes values on open/paste](https://github.com/laytan/cloak.nvim/issues/25) | Debounce-based (may flash)   |
 | **Security features**  | N/A                            | N/A                          | Have I Been Pwned checking   |
 
 <!-- BENCHMARK_START -->
@@ -458,6 +459,18 @@ Measured on GitHub Actions (Ubuntu, averaged over 10000 iterations):
 - **Line-Specific Re-masking** — Only affected lines are re-processed
 - **Zero Debounce** — Instant updates with `nvim_buf_attach`
 - **Pre-computed Offsets** — O(1) byte-to-line conversion
+
+### Why Leak-Free?
+
+Unlike cloak.nvim and camouflage.nvim, shelter.nvim is architecturally designed to never expose sensitive values — not even for a single frame. cloak.nvim has an [open issue](https://github.com/laytan/cloak.nvim/issues/25) where values are briefly flashed on file open and when pasting in insert mode. This happens because it relies on event-driven re-cloaking with inherent timing gaps.
+
+shelter.nvim avoids this entirely:
+
+- **Synchronous `nvim_buf_attach`** — Masks are applied in the `on_lines` callback before Neovim renders the next frame, so changed lines are never displayed unmasked
+- **Pre-populated cache** — Initial buffer load parses and masks content before the buffer is displayed
+- **No debounce** — Re-masking is instant and synchronous, not deferred via timers or `vim.schedule`
+
+This means shelter.nvim is safe for screen sharing, recordings, and any scenario where even a brief flash of a secret is unacceptable.
 
 The benchmarks also include a **Pure Lua** baseline — simple Lua pattern matching with extmarks and full buffer parsing on every change. This represents the best you can physically achieve without a dedicated plugin or separate optimisations. Even this minimal approach is slower than shelter.nvim at scale because it still has to iterate every line in Lua and call into the Neovim API per match. Any future plugin that aims to match shelter.nvim's performance would need to move beyond pure Lua — either via a native binary, SIMD-accelerated parsing, or similarly complex incremental update strategies.
 
