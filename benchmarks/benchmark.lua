@@ -1,4 +1,4 @@
--- Performance benchmark: shelter.nvim vs cloak.nvim
+-- Performance benchmark: shelter.nvim vs cloak.nvim vs camouflage.nvim
 -- Run with: nvim --headless -u benchmarks/minimal_init.lua -l benchmarks/benchmark.lua
 --
 -- Output: JSON file (benchmark_results.json) with timing results
@@ -94,6 +94,43 @@ local function benchmark_cloak_parse(content, iterations)
 	return (total_time / iterations) / 1e6 -- Convert ns to ms
 end
 
+---Benchmark camouflage.nvim masking (parsing equivalent)
+---@param content string
+---@param iterations number
+---@return number|nil Average time in milliseconds, or nil if camouflage not available
+local function benchmark_camouflage_parse(content, iterations)
+	local ok, camo_core = pcall(require, "camouflage.core")
+	if not ok then
+		return nil
+	end
+
+	-- Create a scratch buffer with env content
+	local bufnr = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(content, "\n"))
+	vim.api.nvim_set_current_buf(bufnr)
+	vim.api.nvim_buf_set_name(bufnr, "test.env")
+	vim.bo[bufnr].filetype = "dotenv"
+
+	-- Warmup run (not timed)
+	camo_core.apply_decorations(bufnr, "test.env")
+	camo_core.clear_decorations(bufnr)
+
+	-- Timed runs
+	local total_time = 0
+	for _ = 1, iterations do
+		camo_core.clear_decorations(bufnr)
+		local start = hrtime()
+		camo_core.apply_decorations(bufnr, "test.env")
+		local elapsed = hrtime() - start
+		total_time = total_time + elapsed
+	end
+
+	-- Cleanup
+	vim.api.nvim_buf_delete(bufnr, { force = true })
+
+	return (total_time / iterations) / 1e6 -- Convert ns to ms
+end
+
 --------------------------------------------------------------------------------
 -- PREVIEW BENCHMARKS (Telescope preview scenario)
 --------------------------------------------------------------------------------
@@ -134,6 +171,15 @@ end
 local function benchmark_cloak_preview(content, iterations)
 	-- cloak.nvim uses the same mechanism for preview
 	return benchmark_cloak_parse(content, iterations)
+end
+
+---Benchmark camouflage.nvim preview (same as parse, camouflage doesn't distinguish)
+---@param content string
+---@param iterations number
+---@return number|nil Average time in milliseconds
+local function benchmark_camouflage_preview(content, iterations)
+	-- camouflage.nvim uses the same mechanism for preview
+	return benchmark_camouflage_parse(content, iterations)
 end
 
 --------------------------------------------------------------------------------
@@ -219,6 +265,43 @@ local function benchmark_cloak_edit(content, iterations)
 	return (total_time / iterations) / 1e6
 end
 
+---Benchmark camouflage.nvim re-masking after edit
+---@param content string
+---@param iterations number
+---@return number|nil Average time in milliseconds
+local function benchmark_camouflage_edit(content, iterations)
+	local ok, camo_core = pcall(require, "camouflage.core")
+	if not ok then
+		return nil
+	end
+
+	-- Create buffer
+	local bufnr = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(content, "\n"))
+	vim.api.nvim_set_current_buf(bufnr)
+	vim.api.nvim_buf_set_name(bufnr, "test_edit.env")
+	vim.bo[bufnr].filetype = "dotenv"
+
+	-- Initial mask
+	camo_core.apply_decorations(bufnr, "test_edit.env")
+
+	local total_time = 0
+	for i = 1, iterations do
+		-- Simulate edit
+		vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, { "MODIFIED_" .. i .. "=new_secret_value_xxxxx" })
+
+		-- camouflage re-masks by clearing + reapplying (full buffer)
+		camo_core.clear_decorations(bufnr)
+		local start = hrtime()
+		camo_core.apply_decorations(bufnr, "test_edit.env")
+		local elapsed = hrtime() - start
+		total_time = total_time + elapsed
+	end
+
+	vim.api.nvim_buf_delete(bufnr, { force = true })
+	return (total_time / iterations) / 1e6
+end
+
 --------------------------------------------------------------------------------
 -- MAIN RUNNER
 --------------------------------------------------------------------------------
@@ -249,33 +332,39 @@ local function run_benchmarks()
 		-- Parsing benchmarks
 		local shelter_parse = benchmark_shelter_parse(content, ITERATIONS)
 		local cloak_parse = benchmark_cloak_parse(content, ITERATIONS)
+		local camouflage_parse = benchmark_camouflage_parse(content, ITERATIONS)
 		print(
 			string.format(
-				"  Parse:   shelter=%.3fms, cloak=%s",
+				"  Parse:   shelter=%.3fms, cloak=%s, camouflage=%s",
 				shelter_parse,
-				cloak_parse and string.format("%.3fms", cloak_parse) or "N/A"
+				cloak_parse and string.format("%.3fms", cloak_parse) or "N/A",
+				camouflage_parse and string.format("%.3fms", camouflage_parse) or "N/A"
 			)
 		)
 
 		-- Preview benchmarks
 		local shelter_preview = benchmark_shelter_preview(content, ITERATIONS)
 		local cloak_preview = benchmark_cloak_preview(content, ITERATIONS)
+		local camouflage_preview = benchmark_camouflage_preview(content, ITERATIONS)
 		print(
 			string.format(
-				"  Preview: shelter=%.3fms, cloak=%s",
+				"  Preview: shelter=%.3fms, cloak=%s, camouflage=%s",
 				shelter_preview,
-				cloak_preview and string.format("%.3fms", cloak_preview) or "N/A"
+				cloak_preview and string.format("%.3fms", cloak_preview) or "N/A",
+				camouflage_preview and string.format("%.3fms", camouflage_preview) or "N/A"
 			)
 		)
 
 		-- Edit benchmarks
 		local shelter_edit = benchmark_shelter_edit(content, ITERATIONS)
 		local cloak_edit = benchmark_cloak_edit(content, ITERATIONS)
+		local camouflage_edit = benchmark_camouflage_edit(content, ITERATIONS)
 		print(
 			string.format(
-				"  Edit:    shelter=%.3fms, cloak=%s",
+				"  Edit:    shelter=%.3fms, cloak=%s, camouflage=%s",
 				shelter_edit,
-				cloak_edit and string.format("%.3fms", cloak_edit) or "N/A"
+				cloak_edit and string.format("%.3fms", cloak_edit) or "N/A",
+				camouflage_edit and string.format("%.3fms", camouflage_edit) or "N/A"
 			)
 		)
 
@@ -284,12 +373,15 @@ local function run_benchmarks()
 			-- Parsing (raw engine)
 			shelter_parse_ms = round3(shelter_parse),
 			cloak_parse_ms = cloak_parse and round3(cloak_parse) or nil,
+			camouflage_parse_ms = camouflage_parse and round3(camouflage_parse) or nil,
 			-- Preview (Telescope/FZF)
 			shelter_preview_ms = round3(shelter_preview),
 			cloak_preview_ms = cloak_preview and round3(cloak_preview) or nil,
+			camouflage_preview_ms = camouflage_preview and round3(camouflage_preview) or nil,
 			-- Edit (re-masking)
 			shelter_edit_ms = round3(shelter_edit),
 			cloak_edit_ms = cloak_edit and round3(cloak_edit) or nil,
+			camouflage_edit_ms = camouflage_edit and round3(camouflage_edit) or nil,
 		}
 	end
 

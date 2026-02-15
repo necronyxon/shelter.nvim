@@ -398,23 +398,24 @@ local shelter = require("shelter")
 | `shelter.register_mode(name, def)` | Register custom mode            |
 | `shelter.mask_value(value, opts)`  | Mask a value directly           |
 
-## Comparison with cloak.nvim
+## Comparison with cloak.nvim and camouflage.nvim
 
 ### Feature Comparison
 
-| Feature                | shelter.nvim                   | cloak.nvim                   |
-| ---------------------- | ------------------------------ | ---------------------------- |
-| **Performance**        | 3-12x faster (Rust-native)     | Pure Lua                     |
-| **Re-masking**         | Line-specific (incremental)    | Full buffer re-parse         |
-| **Partial masking**    | Built-in mode                  | Manual pattern workaround    |
-| **Multi-line values**  | Full support                   | Not supported                |
-| **Quote handling**     | EDF compliant                  | Pattern-dependent            |
-| **Preview support**    | Telescope, FZF, Snacks         | Telescope only               |
-| **Completion disable** | nvim-cmp + blink-cmp           | nvim-cmp only                |
-| **Custom modes**       | Factory pattern                | Lua patterns                 |
-| **LSP integration**    | ecolog-plugin                  | None                         |
-| **Build step**         | Requires Rust                  | None                         |
-| **File types**         | Env files only                 | Any filetype                 |
+| Feature                | shelter.nvim                   | cloak.nvim                   | camouflage.nvim              |
+| ---------------------- | ------------------------------ | ---------------------------- | ---------------------------- |
+| **Performance**        | 3-12x faster (Rust-native)     | Pure Lua                     | Pure Lua + TreeSitter        |
+| **Re-masking**         | Line-specific (incremental)    | Full buffer re-parse         | Full buffer re-parse         |
+| **Partial masking**    | Built-in mode                  | Manual pattern workaround    | Multiple styles (stars, dotted, scramble) |
+| **Multi-line values**  | Full support                   | Not supported                | Supported                    |
+| **Quote handling**     | EDF compliant                  | Pattern-dependent            | Basic                        |
+| **Preview support**    | Telescope, FZF, Snacks         | Telescope only               | Telescope, Snacks            |
+| **Completion disable** | nvim-cmp + blink-cmp           | nvim-cmp only                | nvim-cmp                     |
+| **Custom modes**       | Factory pattern                | Lua patterns                 | Custom parsers               |
+| **LSP integration**    | ecolog-plugin                  | None                         | None                         |
+| **Build step**         | Requires Rust                  | None                         | None                         |
+| **File types**         | Env files only                 | Any filetype                 | 13+ formats (env, json, yaml, toml, etc.) |
+| **Security features**  | N/A                            | N/A                          | Have I Been Pwned checking   |
 
 <!-- BENCHMARK_START -->
 ### Performance Benchmarks
@@ -462,7 +463,9 @@ Measured on GitHub Actions (Ubuntu, averaged over 10000 iterations):
 
 **Choose shelter.nvim** for dotenv files with maximum performance and features.
 
-**Choose cloak.nvim** for any filetype with minimal setup
+**Choose cloak.nvim** for any filetype with minimal setup.
+
+**Choose camouflage.nvim** for multi-format support (JSON, YAML, TOML, etc.) with password breach checking.
 
 ## Architecture
 

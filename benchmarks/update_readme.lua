@@ -37,13 +37,13 @@ end
 
 ---Calculate difference string
 ---@param shelter_ms number
----@param cloak_ms number|nil
+---@param other_ms number|nil
 ---@return string
-local function calc_diff(shelter_ms, cloak_ms)
-  if not cloak_ms or shelter_ms <= 0 then
+local function calc_diff(shelter_ms, other_ms)
+  if not other_ms or shelter_ms <= 0 then
     return ""
   end
-  local ratio = cloak_ms / shelter_ms
+  local ratio = other_ms / shelter_ms
   if ratio > 1.05 then
     return string.format("%.1fx faster", ratio)
   elseif ratio < 0.95 then
@@ -57,12 +57,15 @@ end
 ---@param lines number
 ---@param shelter_ms number
 ---@param cloak_ms number|nil
+---@param camouflage_ms number|nil
 ---@return string
-local function format_row(lines, shelter_ms, cloak_ms)
+local function format_row(lines, shelter_ms, cloak_ms, camouflage_ms)
   local shelter = string.format("%.2f ms", shelter_ms)
   local cloak = cloak_ms and string.format("%.2f ms", cloak_ms) or "N/A"
-  local diff = calc_diff(shelter_ms, cloak_ms)
-  return string.format("| %d    | %s      | %s      | %s |", lines, shelter, cloak, diff)
+  local camouflage = camouflage_ms and string.format("%.2f ms", camouflage_ms) or "N/A"
+  local cloak_diff = calc_diff(shelter_ms, cloak_ms)
+  local camo_diff = calc_diff(shelter_ms, camouflage_ms)
+  return string.format("| %d    | %s      | %s      | %s      | %s | %s |", lines, shelter, cloak, camouflage, cloak_diff, camo_diff)
 end
 
 ---Generate a single benchmark table
@@ -71,20 +74,22 @@ end
 ---@param sizes number[]
 ---@param shelter_key string
 ---@param cloak_key string
+---@param camouflage_key string
 ---@return string[]
-local function generate_table(title, results, sizes, shelter_key, cloak_key)
+local function generate_table(title, results, sizes, shelter_key, cloak_key, camouflage_key)
   local lines = {
     "#### " .. title,
     "",
-    "| Lines | shelter.nvim | cloak.nvim | Difference |",
-    "|-------|--------------|------------|------------|",
+    "| Lines | shelter.nvim | cloak.nvim | camouflage.nvim | vs cloak | vs camouflage |",
+    "|-------|--------------|------------|-----------------|----------|---------------|",
   }
 
   for _, size in ipairs(sizes) do
     local data = results.benchmarks[tostring(size)]
     local shelter_ms = data[shelter_key]
     local cloak_ms = data[cloak_key]
-    table.insert(lines, format_row(size, shelter_ms, cloak_ms))
+    local camouflage_ms = data[camouflage_key]
+    table.insert(lines, format_row(size, shelter_ms, cloak_ms, camouflage_ms))
   end
 
   return lines
@@ -113,7 +118,7 @@ local function generate_benchmark_section(results)
   local parse_table = generate_table(
     "Parsing Performance",
     results, sizes,
-    "shelter_parse_ms", "cloak_parse_ms"
+    "shelter_parse_ms", "cloak_parse_ms", "camouflage_parse_ms"
   )
   for _, line in ipairs(parse_table) do
     table.insert(output, line)
@@ -124,7 +129,7 @@ local function generate_benchmark_section(results)
   local preview_table = generate_table(
     "Preview Performance (Telescope)",
     results, sizes,
-    "shelter_preview_ms", "cloak_preview_ms"
+    "shelter_preview_ms", "cloak_preview_ms", "camouflage_preview_ms"
   )
   for _, line in ipairs(preview_table) do
     table.insert(output, line)
@@ -135,7 +140,7 @@ local function generate_benchmark_section(results)
   local edit_table = generate_table(
     "Edit Re-masking Performance",
     results, sizes,
-    "shelter_edit_ms", "cloak_edit_ms"
+    "shelter_edit_ms", "cloak_edit_ms", "camouflage_edit_ms"
   )
   for _, line in ipairs(edit_table) do
     table.insert(output, line)
