@@ -8,10 +8,11 @@
 
 Protect sensitive values in your environment files with intelligent, blazingly fast masking.
 
-[Installation](#installation) • [Quick Start](#quick-start) • [Configuration](#configuration) • [Modes](#modes) • [API](#api) • [vs cloak.nvim](#comparison-with-cloaknvim)
+[Installation](#installation) • [Quick Start](#quick-start) • [Configuration](#configuration) • [Modules](#modules) • [Modes](#modes) • [ecolog Integration](#ecolog-integration) • [API](#api) • [vs cloak.nvim](#comparison-with-cloaknvim)
 
 ## Why shelter.nvim?
 
+- **Secure** — Never leak API keys in meetings, screen shares, or pair programming sessions
 - **Fast** — Rust-native parsing, 3-12x faster than alternatives
 - **Instant** — Zero debounce, masks update as you type
 - **Smart** — Only re-processes changed lines, not the entire buffer
@@ -50,10 +51,10 @@ use {
 ## Quick Start
 
 ```lua
--- Minimal setup
+-- Minimal setup - masks all .env files in buffers
 require("shelter").setup({})
 
--- With Telescope integration
+-- With picker integration (Telescope, FZF, Snacks)
 require("shelter").setup({
   modules = {
     files = true,
@@ -64,6 +65,14 @@ require("shelter").setup({
 -- With partial masking (show first/last characters)
 require("shelter").setup({
   default_mode = "partial",
+})
+
+-- With ecolog.nvim integration
+require("shelter").setup({
+  modules = {
+    files = true,
+    ecolog = true,  -- Mask LSP completions and hover
+  },
 })
 ```
 
@@ -78,33 +87,127 @@ require("shelter").setup({
 | `:Shelter info`             | Show status and modes           |
 | `:Shelter build`            | Rebuild native library          |
 
-**Modules:** `files`, `telescope_previewer`, `fzf_previewer`, `snacks_previewer`
-
 ## Configuration
+
+### Full Configuration Reference
 
 ```lua
 require("shelter").setup({
   -- Appearance
-  mask_char = "*",
-  highlight_group = "Comment",
+  mask_char = "*",              -- Character used for masking
+  highlight_group = "Comment",  -- Highlight group for masked text
 
   -- Behavior
-  skip_comments = true,
-  default_mode = "full",  -- "full", "partial", "none", or custom
-  env_filetypes = { "dotenv", "sh", "conf" },
+  skip_comments = true,         -- Don't mask commented lines
+  default_mode = "full",        -- "full", "partial", "none", or custom
+  env_filetypes = { "dotenv", "sh", "conf" },  -- Filetypes to mask
 
-  -- Module toggles
+  -- Module toggles (see Modules section for details)
   modules = {
-    files = {
-      shelter_on_leave = true,
-      disable_cmp = true,
-    },
+    files = true,               -- Buffer masking
     telescope_previewer = false,
     fzf_previewer = false,
     snacks_previewer = false,
+    ecolog = false,             -- ecolog.nvim integration
+  },
+
+  -- Pattern-based mode selection
+  patterns = {
+    ["*_KEY"] = "full",         -- Full mask for API keys
+    ["*_PUBLIC*"] = "none",     -- Don't mask public values
+    ["DEBUG"] = "none",         -- Don't mask debug flags
+  },
+
+  -- Source file-based mode selection
+  sources = {
+    [".env.local"] = "none",       -- Don't mask local dev file
+    [".env.production"] = "full",  -- Full mask for production
+  },
+
+  -- Mode configuration (see Modes section)
+  modes = {
+    full = { preserve_length = true },
+    partial = { show_start = 3, show_end = 3 },
   },
 })
 ```
+
+## Modules
+
+Modules control which contexts shelter.nvim masks values in.
+
+### files
+
+Buffer masking for `.env` files opened in Neovim.
+
+```lua
+modules = {
+  files = true,  -- Simple enable
+
+  -- Or with options:
+  files = {
+    shelter_on_leave = true,  -- Re-mask when leaving buffer (default: true)
+    disable_cmp = true,       -- Disable completion in .env files (default: true)
+  },
+}
+```
+
+**Features:**
+- Instant masking as you type
+- Line-specific updates (only changed lines re-masked)
+- Peek functionality to temporarily reveal current line
+- Optional completion disable to prevent plugins from exposing values
+
+### telescope_previewer
+
+Mask values in Telescope file previews.
+
+```lua
+modules = {
+  telescope_previewer = true,
+}
+```
+
+When enabled, `.env` files shown in Telescope's preview window will have their values masked.
+
+### fzf_previewer
+
+Mask values in fzf-lua file previews.
+
+```lua
+modules = {
+  fzf_previewer = true,
+}
+```
+
+### snacks_previewer
+
+Mask values in Snacks.nvim file previews.
+
+```lua
+modules = {
+  snacks_previewer = true,
+}
+```
+
+### ecolog
+
+Integration with [ecolog.nvim](https://github.com/ph1losof/ecolog.nvim) for LSP-based environment variable management.
+
+```lua
+modules = {
+  ecolog = true,  -- Enable all contexts
+
+  -- Or with fine-grained control:
+  ecolog = {
+    cmp = true,     -- Mask completion item values (default: true)
+    peek = true,    -- Mask hover/peek content (default: true)
+    picker = true,  -- Mask variable picker entries (default: true)
+  },
+}
+```
+
+See [ecolog Integration](#ecolog-integration) for detailed setup.
 
 ## Modes
 
@@ -129,7 +232,7 @@ modes = {
     show_start = 3,
     show_end = 3,
     min_mask = 3,
-    fallback_mode = "full",
+    fallback_mode = "full",  -- Use full mode for short values
   },
 }
 ```
@@ -208,6 +311,75 @@ sources = {
 
 **Priority:** Key pattern → Source pattern → Default mode
 
+## ecolog Integration
+
+shelter.nvim provides deep integration with [ecolog.nvim](https://github.com/ph1losof/ecolog.nvim), an LSP-powered environment variable manager.
+
+### Why Use Both?
+
+- **ecolog.nvim** provides LSP features: completion, hover, go-to-definition, diagnostics
+- **shelter.nvim** ensures values are never exposed, even in LSP responses
+
+Without shelter.nvim, when you trigger completion or hover in ecolog, the actual values are visible. With the integration enabled, values are masked everywhere while still being functional.
+
+### Setup
+
+Install both plugins:
+
+```lua
+-- lazy.nvim
+{
+  "ph1losof/ecolog.nvim",
+  config = function()
+    require("ecolog").setup({
+      lsp = { backend = "auto" },
+    })
+  end,
+},
+{
+  "ph1losof/shelter.nvim",
+  config = function()
+    require("shelter").setup({
+      modules = {
+        files = true,           -- Buffer masking
+        telescope_previewer = true,
+        ecolog = {
+          cmp = true,           -- Mask completion values
+          peek = true,          -- Mask hover content
+          picker = true,        -- Mask picker entries
+        },
+      },
+    })
+  end,
+},
+```
+
+### How It Works
+
+shelter.nvim intercepts ecolog-lsp responses at the LSP client level:
+
+1. **Completion** (`cmp`): When you type `process.env.`, completion items show masked values
+2. **Hover** (`peek`): When you hover over a variable, the value is masked
+3. **Picker** (`picker`): The variable browser shows masked values
+
+**Copying/Peeking Values:** Even with masking enabled, you can still copy the real value using ecolog's copy commands. shelter.nvim hooks into ecolog's `on_variable_peek` hook to provide the unmasked value when explicitly requested.
+
+### Runtime Control
+
+Toggle ecolog contexts independently:
+
+```lua
+local shelter = require("shelter")
+
+-- Toggle all ecolog contexts
+shelter.toggle("ecolog")
+
+-- Toggle specific contexts
+shelter.integrations.ecolog.toggle("cmp")
+shelter.integrations.ecolog.toggle("peek")
+shelter.integrations.ecolog.toggle("picker")
+```
+
 ## API
 
 ```lua
@@ -232,16 +404,17 @@ local shelter = require("shelter")
 
 | Feature                | shelter.nvim                   | cloak.nvim                   |
 | ---------------------- | ------------------------------ | ---------------------------- |
-| **Performance**        | ✅ 3-12x faster (Rust-native)  | 🟡 Pure Lua                  |
-| **Re-masking**         | ✅ Line-specific (incremental) | 🟡 Full buffer re-parse      |
-| **Partial masking**    | ✅ Built-in mode               | 🟡 Manual pattern workaround |
-| **Multi-line values**  | ✅ Full support                | ❌ Not supported             |
-| **Quote handling**     | ✅ EDF compliant               | 🟡 Pattern-dependent         |
-| **Preview support**    | ✅ Telescope, FZF, Snacks      | 🟡 Telescope only            |
-| **Completion disable** | ✅ nvim-cmp + blink-cmp        | 🟡 nvim-cmp only             |
-| **Custom modes**       | ✅ Factory pattern             | 🟡 Lua patterns              |
-| **Build step**         | 🟡 Requires Rust               | ✅ None                      |
-| **File types**         | 🟡 Env files only              | ✅ Any filetype              |
+| **Performance**        | 3-12x faster (Rust-native)     | Pure Lua                     |
+| **Re-masking**         | Line-specific (incremental)    | Full buffer re-parse         |
+| **Partial masking**    | Built-in mode                  | Manual pattern workaround    |
+| **Multi-line values**  | Full support                   | Not supported                |
+| **Quote handling**     | EDF compliant                  | Pattern-dependent            |
+| **Preview support**    | Telescope, FZF, Snacks         | Telescope only               |
+| **Completion disable** | nvim-cmp + blink-cmp           | nvim-cmp only                |
+| **Custom modes**       | Factory pattern                | Lua patterns                 |
+| **LSP integration**    | ecolog-plugin                  | None                         |
+| **Build step**         | Requires Rust                  | None                         |
+| **File types**         | Env files only                 | Any filetype                 |
 
 <!-- BENCHMARK_START -->
 ### Performance Benchmarks
@@ -312,6 +485,12 @@ Measured on GitHub Actions (Ubuntu, averaged over 10000 iterations):
 - **Mode Factory** — Creates and manages masking mode instances
 - **Extmarks** — Applies masks via Neovim's extmark API
 - **nvim_buf_attach** — Tracks line changes for instant re-masking
+
+## Related Projects
+
+- **[ecolog.nvim](https://github.com/ph1losof/ecolog.nvim)** — LSP-powered environment variable management
+- **[ecolog-lsp](https://github.com/ph1losof/ecolog-lsp)** — The Language Server providing env var analysis
+- **[korni](https://github.com/ph1losof/korni)** — Zero-copy `.env` file parser (used internally)
 
 ## License
 
