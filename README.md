@@ -83,7 +83,7 @@ require("shelter").setup({
 | `:Shelter toggle [module]`  | Toggle masking on/off           |
 | `:Shelter enable [module]`  | Enable masking                  |
 | `:Shelter disable [module]` | Disable masking                 |
-| `:Shelter peek`             | Reveal current line temporarily |
+| `:Shelter peek`             | Reveal value while cursor is on it |
 | `:Shelter info`             | Show status and modes           |
 | `:Shelter build`            | Rebuild native library          |
 
@@ -155,7 +155,7 @@ modules = {
 **Features:**
 - Instant masking as you type
 - Line-specific updates (only changed lines re-masked)
-- Peek functionality to temporarily reveal current line
+- Peek functionality to reveal current value while cursor stays on it
 - Optional completion disable to prevent plugins from exposing values
 
 ### telescope_previewer
@@ -392,7 +392,7 @@ local shelter = require("shelter")
 | `shelter.is_enabled(module)`       | Check if module is enabled      |
 | `shelter.toggle(module)`           | Toggle module on/off            |
 | `shelter.get_config()`             | Get current configuration       |
-| `shelter.peek()`                   | Reveal current line temporarily |
+| `shelter.peek()`                   | Reveal value while cursor is on it |
 | `shelter.info()`                   | Show plugin status              |
 | `shelter.build()`                  | Rebuild native library          |
 | `shelter.register_mode(name, def)` | Register custom mode            |
